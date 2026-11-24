@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Air Harp</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; background: #05060a; color: #e8ecf5; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+      #stage { position: fixed; inset: 0; display: grid; place-items: center; min-width: 0; min-height: 0; }
+      #video { display: none; }
+      #canvas { max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+      #start {
+        position: fixed; inset: 0; display: grid; place-items: center; z-index: 10;
+        background: radial-gradient(circle at center, #121829 0%, #05060a 70%);
+      }
+      #start button {
+        font-size: 18px; padding: 14px 28px; border-radius: 999px; border: 1px solid #6ee7ff55;
+        background: #0d1424; color: #c9f6ff; cursor: pointer; letter-spacing: 0.04em;
+        box-shadow: 0 0 24px #6ee7ff33;
+      }
+      #start p {
+        margin: 16px auto 0; max-width: min(28rem, calc(100vw - 280px));
+        opacity: 0.6; font-size: 14px; text-align: center; line-height: 1.6;
+      }
+      body:has(#panelBody:not([hidden])) #start p {
+        max-width: min(28rem, max(14rem, calc(100vw - 520px)));
+      }
+      #recordBtn {
+        position: fixed; top: 12px; left: 12px; z-index: 12;
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 14px; border-radius: 999px; cursor: pointer;
+        border: 1px solid rgba(110, 231, 255, 0.4); background: rgba(8, 12, 22, 0.55);
+        color: #e7fbff; letter-spacing: 0.06em; backdrop-filter: blur(12px);
+        font: inherit; font-size: 13px;
+      }
+      #recordBtn[hidden] { display: none; }
+      #recordDot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #ff3355; box-shadow: 0 0 8px #ff3355;
+      }
+      #recordBtn[aria-pressed="true"] #recordDot { animation: rec-pulse 1s ease-in-out infinite; }
+      @keyframes rec-pulse { 50% { opacity: 0.35; } }
+      #guide {
+        position: fixed; z-index: 11; pointer-events: none; max-width: calc(100vw - 16px);
+      }
+      #guide[hidden] { display: none; }
+      #guideList {
+        display: flex; flex-wrap: wrap; gap: 6px; width: 100%;
+        margin: 0; padding: 0; list-style: none;
+      }
+      #guide li, #guideHide {
+        display: flex; align-items: center; gap: 6px;
+        padding: 3px 9px 3px 3px; border-radius: 999px;
+        background: rgba(5, 8, 16, 0.78); border: 1px solid rgba(110, 231, 255, 0.32);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); color: #e7fbff;
+      }
+      #guide svg { width: 30px; height: 30px; flex: none; stroke: #e7fbff; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+      #guide svg .dot { fill: #e7fbff; stroke: none; }
+      #guide svg .move { stroke: #7ef0ff; }
+      #guide li span { display: flex; flex-direction: column; line-height: 1.15; }
+      #guide li strong { font-size: 12px; font-weight: 650; }
+      #guide li em { font-style: normal; font-size: 10px; opacity: 0.68; }
+      #guideHide {
+        pointer-events: auto; cursor: pointer; font: inherit; font-size: 11px;
+        letter-spacing: 0.04em; padding: 6px 10px;
+      }
+      #guide li.guide-hide { padding: 0; background: none; border: none; box-shadow: none; }
+      #guide.is-collapsed #guideList li:not(.guide-hide) { display: none; }
+      #hud { position: fixed; left: 12px; bottom: 10px; font-size: 12px; opacity: 0.55; pointer-events: none; }
+      #toast {
+        position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+        padding: 8px 16px; border-radius: 999px; z-index: 5; pointer-events: none;
+        background: rgba(8, 12, 22, 0.78); border: 1px solid rgba(110, 231, 255, 0.35);
+        color: #e7fbff; font-size: 14px; letter-spacing: 0.04em; opacity: 0;
+        box-shadow: 0 0 18px rgba(110, 231, 255, 0.18);
+      }
+      #toast.show { opacity: 1; }
+      #panel {
+        position: fixed; top: 12px; right: 12px; z-index: 12;
+        width: min(240px, calc(100vw - 24px)); color: #e7fbff; font-size: 13px;
+      }
+      #panelToggle {
+        width: 100%; text-align: left; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+        border: 1px solid rgba(110, 231, 255, 0.4); background: rgba(8, 12, 22, 0.55);
+        color: #e7fbff; letter-spacing: 0.08em; backdrop-filter: blur(12px);
+      }
+      #panelBody {
+        margin-top: 8px; padding: 12px; display: grid; gap: 10px; border-radius: 16px;
+        border: 1px solid rgba(110, 231, 255, 0.35); background: rgba(8, 12, 22, 0.62);
+        backdrop-filter: blur(16px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+      #panelBody[hidden] { display: none; }
+      #panel label { display: grid; gap: 4px; }
+      #panel label.row { display: flex; justify-content: space-between; align-items: center; }
+      #panel select, #panel input[type="range"] { width: 100%; accent-color: #6ee7ff; }
+      #panel select {
+        background: rgba(5, 8, 16, 0.72); color: #e7fbff; border-radius: 8px; padding: 6px 8px;
+        border: 1px solid rgba(110, 231, 255, 0.28);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="canvas"></canvas>
+    </div>
+    <div id="start">
+      <div>
+        <button id="startBtn">Start camera &amp; sound</button>
+        <p>Pinch with both hands to stretch a string. One hand alone does not draw.<br />Point and swipe to pluck. Two fingers play glass. A flat hand strums a chord.<br />Close a fist and strike down for the kick. Strike that fist sideways for the snare.<br />Hold a still fist to loop that bar. Drop the fist to stop the loop. Rest on a note and it walks up the scale.<br />Draw a circle with one finger to place a drum, then tap it. Wiggle a fist for a shaker.<br />Hold a pinch near a string for a drone, and raise that hand to play louder.<br />Pinch an end to retune. Drag the middle to move a string. Hold still on it to mute.<br />Hold a still open palm toward the camera to clear.<br />Tune (top right) sets the scale. Keys: <b>D</b> debug · <b>Z</b> undo · <b>C</b> clear · <b>R</b> record</p>
+      </div>
+    </div>
+    <button id="recordBtn" type="button" hidden aria-pressed="false">
+      <span id="recordDot" hidden></span>
+      <span id="recordLabel">Record</span>
+    </button>
+    <aside id="panel">
+      <button id="panelToggle" type="button" aria-expanded="false" aria-controls="panelBody">Tune</button>
+      <div id="panelBody" hidden>
+        <label>Scale <select id="setScale"></select></label>
+        <label>Root <select id="setRoot"></select></label>
+        <label>Octaves <span id="octaveRead"></span> <input id="setOctaves" type="range" /></label>
+        <label>Reverb <span id="reverbRead"></span> <input id="setReverb" type="range" /></label>
+        <label>Timbre
+          <select id="setTimbre">
+            <option value="harp">Harp</option>
+            <option value="bass">Bass</option>
+            <option value="glass">Glass</option>
+          </select>
+        </label>
+        <label class="row">Pitch labels <input id="setLabels" type="checkbox" /></label>
+        <label class="row">Snap to grid <input id="setSnap" type="checkbox" /></label>
+      </div>
+    </aside>
+    <aside id="guide" hidden aria-label="Gesture guide">
+      <ul id="guideList">
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M5 18H31"/><circle class="dot" cx="8" cy="18" r="3.2"/><circle class="dot" cx="28" cy="18" r="3.2"/></svg><span><strong>String</strong><em>both pinch</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M4 27H32"/><path d="M18 5v16"/><circle class="dot" cx="18" cy="5" r="2.3"/><path class="move" d="M13 13l5 5 5-5"/></svg><span><strong>Pluck</strong><em>one finger</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M4 28H32"/><path d="M13 5v16M23 5v16"/><circle class="dot" cx="13" cy="5" r="2.1"/><circle class="dot" cx="23" cy="5" r="2.1"/></svg><span><strong>Glass</strong><em>two fingers</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M5 30H31"/><path d="M8 23V13M14 23V8M20 23V8M26 23V14"/><path d="M7 23h21"/><path class="move" d="M6 5h22M24 2l5 3-5 3"/></svg><span><strong>Chord</strong><em>flat hand</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="11" y="4" width="14" height="13" rx="3"/><path class="move" d="M18 19v12M13 26l5 6 5-6"/></svg><span><strong>Kick</strong><em>fist down</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="3" y="11" width="14" height="13" rx="3"/><path class="move" d="M19 17.5H32M26 12l6 5.5L26 23"/></svg><span><strong>Snare</strong><em>fist side</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="10" y="8" width="16" height="14" rx="4"/><path d="M8 28h20"/><path class="move" d="M14 28v-4M22 28v-4"/></svg><span><strong>Loop</strong><em>fist still</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="11"/><circle class="dot" cx="29" cy="18" r="2"/></svg><span><strong>Drum</strong><em>draw a circle</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="11" y="10" width="14" height="13" rx="3"/><path class="move" d="M6 16h6M4 12l4 4-4 4M30 16h-6M32 12l-4 4 4 4"/></svg><span><strong>Shaker</strong><em>wiggle a fist</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="dot" cx="13" cy="25" r="3"/><circle class="dot" cx="22" cy="25" r="3"/><path class="move" d="M17.5 19V5M12 10l5.5-6L23 10"/></svg><span><strong>Drone</strong><em>hold, lift</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M7 33V18M13 33V8M18 33V5M23 33V8M29 33V17"/><path d="M7 18c-3-1-4-5-2-8"/></svg><span><strong>Clear</strong><em>palm still</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M5 26H31"/><circle class="dot" cx="28" cy="26" r="3"/><path class="move" d="M28 21V8M23 13l5-6 5 6"/></svg><span><strong>Retune</strong><em>drag an end</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M5 18H31"/><path class="move" d="M11 18h14M21 14l5 4-5 4M15 14l-5 4 5 4"/></svg><span><strong>Move</strong><em>drag middle</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M4 24H32"/><path d="M13 24V12M23 24V12M11 12h14"/></svg><span><strong>Mute</strong><em>hold still</em></span></li>
+        <li class="guide-hide"><button id="guideHide" type="button" aria-expanded="true">Hide</button></li>
+      </ul>
+    </aside>
+    <div id="hud"></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

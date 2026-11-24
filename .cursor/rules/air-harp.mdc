@@ -1,0 +1,41 @@
+---
+description: Project rules for Air Harp (webcam hand-tracking string instrument)
+globs: ["**/*.js", "**/*.html"]
+alwaysApply: true
+---
+
+# Air Harp — project rules
+
+## What this is
+A browser-only instrument: MediaPipe Hand Landmarker tracks hands from the webcam,
+pinch-and-drag creates glowing strings, swiping a fingertip across a string plucks it
+(Karplus–Strong audio + standing-wave animation + spark particles). No backend.
+
+## Stack (do not change without asking)
+- Vanilla JS ES modules + Vite. No React, no TypeScript, no UI frameworks.
+- `@mediapipe/tasks-vision` pinned to 0.10.14. WASM path in `src/config.js` must match that version.
+- Canvas 2D for rendering. Web Audio API for sound. No audio libraries (no Tone.js) unless asked.
+
+## Architecture
+- `config.js` — every tunable number. Never hard-code magic numbers elsewhere; add them here.
+- `tracking.js` — camera + HandLandmarker setup + landmark → pixel conversion (handles mirroring).
+- `gestures.js` — per-hand state machine (`HandState`) emitting events: pinchStart / pinchMove / pinchEnd / move.
+- `strings.js` — `HarpString` model + `StringField` (add/undo/clear/hit-testing). Pure logic, no drawing.
+- `audio.js` — `Synth` (Karplus–Strong, cached buffers) + `lengthToFreq`.
+- `particles.js` — spark particle system.
+- `render.js` — all drawing. Pure functions of state; never mutate game state here.
+- `main.js` — wiring + the rAF loop only.
+
+## Conventions
+- All coordinates in the loop are canvas pixels (video resolution), already mirrored. Only `toPixels` touches normalized coords.
+- Hands are keyed by handedness label ("Left"/"Right"), not array index.
+- Hit-testing uses segment intersection between the fingertip's previous and current position — never point-near-line only (fast swipes would be missed).
+- Every new gesture needs hysteresis or a cooldown. Assume landmarks jitter.
+- Keep the frame loop allocation-light: reuse arrays where easy; no per-frame `new AudioContext`, no per-pluck buffer regeneration (use the cache).
+- Performance budget: 60 fps on an M2 MacBook in Chrome with 2 hands and 24 strings.
+- Small, focused functions; JSDoc on exported functions. No dead code, no commented-out code.
+
+## When making changes
+- Explain which module(s) you're touching and why before editing.
+- Don't rewrite working modules wholesale to add a feature — extend them.
+- After changes, list how to manually test the feature (gesture + expected result).
