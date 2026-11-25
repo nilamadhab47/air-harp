@@ -68,6 +68,12 @@
       #guide li.guide-hide { padding: 0; background: none; border: none; box-shadow: none; }
       #guide.is-collapsed #guideList li:not(.guide-hide) { display: none; }
       #hud { position: fixed; left: 12px; bottom: 10px; font-size: 12px; opacity: 0.55; pointer-events: none; }
+      #credit {
+        position: fixed; right: 12px; bottom: 10px; z-index: 11;
+        font-size: 12px; letter-spacing: 0.02em;
+      }
+      #credit a { color: #c9f6ff; opacity: 0.75; text-decoration: none; }
+      #credit a:hover { opacity: 1; }
       #toast {
         position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
         padding: 8px 16px; border-radius: 999px; z-index: 5; pointer-events: none;
@@ -76,6 +82,38 @@
         box-shadow: 0 0 18px rgba(110, 231, 255, 0.18);
       }
       #toast.show { opacity: 1; }
+      #nowPlaying {
+        position: fixed; left: 50%; bottom: 56px; transform: translateX(-50%);
+        width: min(920px, calc(100vw - 28px)); z-index: 8; pointer-events: none;
+        text-align: center; padding: 14px 22px 16px; border-radius: 22px;
+        background: rgba(4, 10, 20, 0.92);
+        border: 2px solid #7ef0ff;
+        box-shadow: 0 0 36px rgba(126, 240, 255, 0.45), 0 16px 40px rgba(0, 0, 0, 0.45);
+      }
+      #nowPlaying[hidden] { display: none; }
+      #nowMeta {
+        font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+        color: #7ef0ff; font-weight: 700;
+      }
+      #nowLine {
+        display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 10px;
+        margin-top: 8px; font-size: 28px; font-weight: 700; line-height: 1.2; color: #e7fbff;
+      }
+      #nowLine span { padding: 0 4px; border-radius: 8px; }
+      #nowLine span.on {
+        color: #041018; background: #7ef0ff;
+        box-shadow: 0 0 18px rgba(126, 240, 255, 0.85);
+      }
+      #nowSwar {
+        margin-top: 4px; font-size: 84px; font-weight: 750; line-height: 0.95;
+        letter-spacing: 0.04em; color: #ffffff;
+        text-shadow: 0 0 24px #7ef0ff;
+      }
+      #nowSwar.pop { animation: swar-pop 0.28s ease; }
+      @keyframes swar-pop {
+        from { transform: scale(0.86); }
+        to { transform: scale(1); }
+      }
       #panel {
         position: fixed; top: 12px; right: 12px; z-index: 12;
         width: min(240px, calc(100vw - 24px)); color: #e7fbff; font-size: 13px;
@@ -108,7 +146,7 @@
     <div id="start">
       <div>
         <button id="startBtn">Start camera &amp; sound</button>
-        <p>Pinch with both hands to stretch a string. One hand alone does not draw.<br />Point and swipe to pluck. Two fingers play glass. A flat hand strums a chord.<br />Close a fist and strike down for the kick. Strike that fist sideways for the snare.<br />Hold a still fist to loop that bar. Drop the fist to stop the loop. Rest on a note and it walks up the scale.<br />Draw a circle with one finger to place a drum, then tap it. Wiggle a fist for a shaker.<br />Hold a pinch near a string for a drone, and raise that hand to play louder.<br />Pinch an end to retune. Drag the middle to move a string. Hold still on it to mute.<br />Hold a still open palm toward the camera to clear.<br />Tune (top right) sets the scale. Keys: <b>D</b> debug · <b>Z</b> undo · <b>C</b> clear · <b>R</b> record</p>
+        <p>Pinch with both hands to stretch a string. One hand alone does not draw.<br />Point and swipe to pluck. Two fingers play glass. A flat hand strums a chord.<br />Close a fist and strike down for the kick. Strike that fist sideways for the snare.<br />Hold a still fist to loop that bar. Drop the fist to stop the loop. Rest on a note and it walks up the scale.<br />Draw a circle with one finger to place a drum, then tap it. A smaller circle is higher. The other hand still plucks.<br />Wiggle a fist for a shaker.<br />Hold a pinch near a string for a drone, and raise that hand to play louder.<br />Pinch an end to retune. Drag the middle to move a string. Hold still on it to mute.<br />Hold a still open palm toward the camera to clear.<br />Tune (top right) sets the scale. Pick a song there, then pluck any string once and the tune plays.<br />Keys: <b>D</b> debug · <b>Z</b> undo · <b>C</b> clear · <b>R</b> record</p>
       </div>
     </div>
     <button id="recordBtn" type="button" hidden aria-pressed="false">
@@ -118,6 +156,7 @@
     <aside id="panel">
       <button id="panelToggle" type="button" aria-expanded="false" aria-controls="panelBody">Tune</button>
       <div id="panelBody" hidden>
+        <label>Song <select id="setSong"></select></label>
         <label>Scale <select id="setScale"></select></label>
         <label>Root <select id="setRoot"></select></label>
         <label>Octaves <span id="octaveRead"></span> <input id="setOctaves" type="range" /></label>
@@ -142,7 +181,7 @@
         <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="11" y="4" width="14" height="13" rx="3"/><path class="move" d="M18 19v12M13 26l5 6 5-6"/></svg><span><strong>Kick</strong><em>fist down</em></span></li>
         <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="3" y="11" width="14" height="13" rx="3"/><path class="move" d="M19 17.5H32M26 12l6 5.5L26 23"/></svg><span><strong>Snare</strong><em>fist side</em></span></li>
         <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="10" y="8" width="16" height="14" rx="4"/><path d="M8 28h20"/><path class="move" d="M14 28v-4M22 28v-4"/></svg><span><strong>Loop</strong><em>fist still</em></span></li>
-        <li><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="11"/><circle class="dot" cx="29" cy="18" r="2"/></svg><span><strong>Drum</strong><em>draw a circle</em></span></li>
+        <li><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="11"/><circle class="dot" cx="29" cy="18" r="2"/></svg><span><strong>Drum</strong><em>circle, then tap</em></span></li>
         <li><svg viewBox="0 0 36 36" aria-hidden="true"><rect x="11" y="10" width="14" height="13" rx="3"/><path class="move" d="M6 16h6M4 12l4 4-4 4M30 16h-6M32 12l-4 4 4 4"/></svg><span><strong>Shaker</strong><em>wiggle a fist</em></span></li>
         <li><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="dot" cx="13" cy="25" r="3"/><circle class="dot" cx="22" cy="25" r="3"/><path class="move" d="M17.5 19V5M12 10l5.5-6L23 10"/></svg><span><strong>Drone</strong><em>hold, lift</em></span></li>
         <li><svg viewBox="0 0 36 36" aria-hidden="true"><path d="M7 33V18M13 33V8M18 33V5M23 33V8M29 33V17"/><path d="M7 18c-3-1-4-5-2-8"/></svg><span><strong>Clear</strong><em>palm still</em></span></li>
@@ -153,6 +192,12 @@
       </ul>
     </aside>
     <div id="hud"></div>
+    <p id="credit">Created by <a href="https://github.com/nilamadhab47" target="_blank" rel="noreferrer">nilamadhab47</a> · <a href="https://github.com/nilamadhab47/air-harp" target="_blank" rel="noreferrer">GitHub</a></p>
+    <div id="nowPlaying" hidden>
+      <div id="nowMeta"></div>
+      <div id="nowLine"></div>
+      <div id="nowSwar"></div>
+    </div>
     <div id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

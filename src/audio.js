@@ -16,6 +16,11 @@ export class Synth {
     this.master.connect(delay);
     delay.connect(this.reverbFb).connect(delay);
     delay.connect(this.reverbWet).connect(comp);
+    comp.threshold.value = CONFIG.compThreshold;
+    comp.knee.value = CONFIG.compKnee;
+    comp.ratio.value = CONFIG.compRatio;
+    comp.attack.value = CONFIG.compAttack;
+    comp.release.value = CONFIG.compRelease;
     comp.connect(this.ctx.destination);
     this.comp = comp;
     this.recordDest = null;
@@ -76,7 +81,7 @@ export class Synth {
 
   /** Pluck buffer cached per timbre and frequency. */
   buffer(freq, timbre = CONFIG.timbre) {
-    timbre = timbre === "bass" || timbre === "glass" ? timbre : "harp";
+    timbre = timbre === "bass" || timbre === "glass" || timbre === "song" ? timbre : "harp";
     const key = `${timbre}:${Math.round(freq * 10)}`;
     if (this.cache.has(key)) return this.cache.get(key);
     const sr = this.ctx.sampleRate;
@@ -84,6 +89,7 @@ export class Synth {
     const buf = this.ctx.createBuffer(1, len, sr);
     const d = buf.getChannelData(0);
     if (timbre === "glass") fillGlass(d, freq, sr);
+    else if (timbre === "song") fillSong(d, freq, sr);
     else if (timbre === "bass") fillKarplus(d, freq, sr, CONFIG.bassDecay, true);
     else fillKarplus(d, freq, sr, CONFIG.decay, false);
     this.cache.set(key, buf);
@@ -138,20 +144,21 @@ export class Synth {
 
   drumBuffer(kind, freq = 0) {
     if (!this.drums) this.drums = new Map();
-    const key = kind === "tom" ? `tom:${Math.round(freq)}` : kind;
+    const voice = kind === "drum" ? "tom" : kind;
+    const key = voice === "tom" ? `tom:${Math.round(freq)}` : kind;
     if (this.drums.has(key)) return this.drums.get(key);
     const sr = this.ctx.sampleRate;
-    const seconds = kind === "kick" ? CONFIG.kickSec
-      : kind === "hat" ? CONFIG.hatSec
-      : kind === "tom" ? CONFIG.tomSec
-      : kind === "shaker" ? CONFIG.shakerSec
+    const seconds = voice === "kick" ? CONFIG.kickSec
+      : voice === "hat" ? CONFIG.hatSec
+      : voice === "tom" ? CONFIG.tomSec
+      : voice === "shaker" ? CONFIG.shakerSec
       : CONFIG.snareSec;
     const buf = this.ctx.createBuffer(1, Math.max(1, Math.floor(sr * seconds)), sr);
     const data = buf.getChannelData(0);
-    if (kind === "kick") fillKick(data, sr);
-    else if (kind === "hat") fillHat(data, sr);
-    else if (kind === "tom") fillTom(data, sr, freq || 140);
-    else if (kind === "shaker") fillShaker(data, sr);
+    if (voice === "kick") fillKick(data, sr);
+    else if (voice === "hat") fillHat(data, sr);
+    else if (voice === "tom") fillTom(data, sr, freq || 140);
+    else if (voice === "shaker") fillShaker(data, sr);
     else fillSnare(data, sr);
     this.drums.set(key, buf);
     return buf;
@@ -258,6 +265,15 @@ export function midiToName(midi, spelling = CONFIG.spelling) {
   const pc = ((n % 12) + 12) % 12;
   const names = spelling === "flat" ? FLAT : SHARP;
   return `${names[pc]}${Math.floor(n / 12) - 1}`;
+}
+
+/** A short clear tone so a tune stays a tune instead of a wash of harp rings. */
+function fillSong(d, freq, sr) {
+  for (let i = 0; i < d.length; i++) {
+    const t = i / sr;
+    const env = Math.exp(-t * CONFIG.songDecay);
+    d[i] = (Math.sin(2 * Math.PI * freq * t) + 0.18 * Math.sin(4 * Math.PI * freq * t)) * env;
+  }
 }
 
 function fillKarplus(d, freq, sr, decay, lowpass) {

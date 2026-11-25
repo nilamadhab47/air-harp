@@ -2,10 +2,10 @@ import { CONFIG } from "./config.js";
 import { dist } from "./geometry.js";
 
 /**
- * A closed one-finger loop. Size picks the drum: small hat, middle tom, large kick.
+ * A closed one-finger loop. Every closed loop is the same drum; a smaller one is higher.
  * Returns null until the path is round, closed, and has gone most of the way around.
  * @param {{x:number,y:number,t:number}[]} points
- * @returns {{x:number,y:number,r:number,kind:"hat"|"tom"|"kick"} | null}
+ * @returns {{x:number,y:number,r:number,kind:"drum"} | null}
  */
 export function circleFromPath(points) {
   if (!points || points.length < CONFIG.circleMinPoints) return null;
@@ -51,19 +51,13 @@ export function circleFromPath(points) {
   if (Math.sqrt(varSum / points.length) / mean > CONFIG.circleRound) return null;
   if (Math.abs(turn) < CONFIG.circleMinTurn) return null;
   if (length < mean * Math.PI * 2 * CONFIG.circleCoverage) return null;
-  return { x, y, r: mean, kind: padKind(mean) };
+  return { x, y, r: mean, kind: "drum" };
 }
 
-/** @returns {"hat" | "tom" | "kick"} */
-export function padKind(radius) {
-  if (radius < CONFIG.circleHatR) return "hat";
-  if (radius < CONFIG.circleTomR) return "tom";
-  return "kick";
-}
-
-/** Higher on the frame is a higher tom. */
-export function tomFreq(y, height) {
-  const t = Math.min(1, Math.max(0, y / (height || 1)));
+/** A smaller circle is a higher drum. One drum, pitched by its size. */
+export function drumFreq(radius) {
+  const span = CONFIG.circleMaxR - CONFIG.circleMinR || 1;
+  const t = Math.min(1, Math.max(0, (radius - CONFIG.circleMinR) / span));
   return CONFIG.tomHzTop + (CONFIG.tomHzBottom - CONFIG.tomHzTop) * t;
 }
 
@@ -80,7 +74,7 @@ export class DrumKit {
       r: circle.r,
       kind: circle.kind,
       freq,
-      hue: circle.kind === "hat" ? 168 : circle.kind === "tom" ? 36 : 10,
+      hue: 36,
       hitAt: -1,
       born: now,
     };

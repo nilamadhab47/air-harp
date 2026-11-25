@@ -3,6 +3,15 @@
 Draw glowing strings in the air with a pinch, then pluck them with your fingertip.
 It runs in the browser using MediaPipe hand tracking, Web Audio (Karplus–Strong) and Canvas 2D.
 
+Created by [nilamadhab47](https://github.com/nilamadhab47).
+
+## GitHub
+
+- This project: [github.com/nilamadhab47/air-harp](https://github.com/nilamadhab47/air-harp)
+- Creator: [github.com/nilamadhab47](https://github.com/nilamadhab47)
+- Hand tracking: [google-ai-edge/mediapipe](https://github.com/google-ai-edge/mediapipe) (`@mediapipe/tasks-vision` 0.10.14)
+- Dev server: [vitejs/vite](https://github.com/vitejs/vite)
+
 ## Run
 
 ```bash

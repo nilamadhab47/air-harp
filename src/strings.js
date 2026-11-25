@@ -1,6 +1,7 @@
 import { CONFIG } from "./config.js";
 import { dist, distToSegment, segmentsCross, segmentIntersection, projectT } from "./geometry.js";
 import { lengthToNote } from "./audio.js";
+import { laySong } from "./songs.js";
 
 let nextId = 1;
 
@@ -71,11 +72,13 @@ export class StringField {
     this.strings.length = 0;
   }
 
-  /** Re-quantize every string after the scale, root, or octave range changes. */
+  /** Re-quantize every string after the scale, root, or song changes. A song replaces length. */
   retune(maxLength) {
-    for (const s of this.strings) {
-      this.applyNote(s, maxLength);
+    if (laySong(this.strings)) {
+      for (const s of this.strings) if (s.draft) this.applyNote(s, maxLength);
+      return;
     }
+    for (const s of this.strings) this.applyNote(s, maxLength);
   }
 
   /** A string that follows two pinch points. It is dropped on release if it is still too short. */
@@ -147,7 +150,7 @@ export class StringField {
     s[end].x = x;
     s[end].y = y;
     s.length = gap;
-    this.applyNote(s, maxLength);
+    this.retune(maxLength);
   }
 
   /** Slide a string without changing its length or pitch. */

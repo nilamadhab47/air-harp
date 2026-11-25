@@ -1,4 +1,5 @@
 import { CONFIG, ROOTS, SCALES } from "./config.js";
+import { SONGS } from "./songs.js";
 
 const KEY = "air-harp-v1";
 const TIMBRES = ["harp", "bass", "glass"];
@@ -24,6 +25,7 @@ function clamp(n, lo, hi, fallback) {
 /** Copy of the values the panel is allowed to change. */
 export function currentSettings() {
   return {
+    songId: CONFIG.songId,
     scaleId: CONFIG.scaleId,
     root: CONFIG.root,
     octaves: CONFIG.octaves,
@@ -48,6 +50,7 @@ export function applySettings(partial = {}) {
   const reverb = clamp(partial.reverb, 0, CONFIG.reverbMax, CONFIG.reverb);
   const timbre = TIMBRES.includes(partial.timbre) ? partial.timbre : CONFIG.timbre;
 
+  CONFIG.songId = SONGS.some((song) => song.id === partial.songId) ? partial.songId : CONFIG.songId;
   CONFIG.scaleId = scale.id;
   CONFIG.scale = scale.steps.slice();
   CONFIG.root = root;
@@ -88,6 +91,7 @@ export function writeSaved(settings) {
 export function bindPanel(onChange) {
   const toggle = document.getElementById("panelToggle");
   const body = document.getElementById("panelBody");
+  const songSel = document.getElementById("setSong");
   const scaleSel = document.getElementById("setScale");
   const rootSel = document.getElementById("setRoot");
   const octaves = document.getElementById("setOctaves");
@@ -98,6 +102,12 @@ export function bindPanel(onChange) {
   const octaveRead = document.getElementById("octaveRead");
   const reverbRead = document.getElementById("reverbRead");
 
+  for (const song of SONGS) {
+    const option = document.createElement("option");
+    option.value = song.id;
+    option.textContent = song.name;
+    songSel.appendChild(option);
+  }
   for (const scale of SCALES) {
     const option = document.createElement("option");
     option.value = scale.id;
@@ -119,6 +129,7 @@ export function bindPanel(onChange) {
 
   function readForm() {
     return {
+      songId: songSel.value,
       scaleId: scaleSel.value,
       root: Number(rootSel.value),
       octaves: Number(octaves.value),
@@ -135,6 +146,7 @@ export function bindPanel(onChange) {
   }
 
   function writeForm(settings) {
+    songSel.value = settings.songId;
     scaleSel.value = settings.scaleId;
     rootSel.value = String(settings.root);
     octaves.value = String(settings.octaves);
@@ -150,6 +162,7 @@ export function bindPanel(onChange) {
     onChange(readForm());
   }
 
+  songSel.addEventListener("change", emit);
   scaleSel.addEventListener("change", emit);
   rootSel.addEventListener("change", emit);
   octaves.addEventListener("input", paintReads);

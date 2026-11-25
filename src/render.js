@@ -22,6 +22,65 @@ export function drawVideo(ctx, video, w, h) {
   ctx.fillRect(0, 0, w, h);
 }
 
+/**
+ * Concert wash over the camera. Beams drift on their own.
+ * A plucked string, or a drum hit, flashes the room in that color.
+ */
+export function drawDisco(ctx, strings, pads, now, w, h) {
+  const hueA = (now / CONFIG.discoCycleMs) * 360;
+  const hueB = hueA + 150;
+  let flash = 0;
+  let flashHue = hueA;
+  let fx = w * 0.5;
+  let fy = h * 0.45;
+  for (const s of strings) {
+    const e = s.energy(now) * s.amp;
+    if (e <= flash) continue;
+    flash = e;
+    flashHue = s.hue;
+    fx = s.labelX == null ? (s.a.x + s.b.x) / 2 : s.labelX;
+    fy = s.labelY == null ? (s.a.y + s.b.y) / 2 : s.labelY;
+  }
+  for (const pad of pads) {
+    const age = now - pad.hitAt;
+    if (age < 0 || age > CONFIG.discoFlashMs) continue;
+    const e = 1 - age / CONFIG.discoFlashMs;
+    if (e <= flash) continue;
+    flash = e;
+    flashHue = pad.hue;
+    fx = pad.x;
+    fy = pad.y;
+  }
+
+  const wash = Math.min(0.72, CONFIG.discoWash + flash * CONFIG.discoWashKick);
+  ctx.save();
+  ctx.globalCompositeOperation = "overlay";
+  ctx.fillStyle = `hsla(${hueA}, 95%, 48%, ${wash})`;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = "screen";
+  beam(ctx, w * (0.15 + 0.7 * (0.5 + 0.5 * Math.sin(now / CONFIG.discoSweepMs))), 0, w, h, hueA, CONFIG.discoIdle);
+  beam(ctx, w * (0.85 - 0.7 * (0.5 + 0.5 * Math.cos(now / (CONFIG.discoSweepMs * 1.37)))), h, w, h, hueB, CONFIG.discoIdle * 0.85);
+  if (flash > 0.05) {
+    const reach = Math.max(w, h) * 0.62;
+    const burst = ctx.createRadialGradient(fx, fy, 0, fx, fy, reach);
+    const alpha = Math.min(CONFIG.discoFlash, flash * CONFIG.discoFlash);
+    burst.addColorStop(0, `hsla(${flashHue}, 100%, 68%, ${alpha})`);
+    burst.addColorStop(1, `hsla(${flashHue}, 100%, 42%, 0)`);
+    ctx.fillStyle = burst;
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.restore();
+}
+
+function beam(ctx, x, y, w, h, hue, alpha) {
+  const g = ctx.createLinearGradient(x, y, x + w * 0.22, h * 0.5);
+  g.addColorStop(0, `hsla(${hue}, 100%, 64%, 0)`);
+  g.addColorStop(0.5, `hsla(${hue}, 100%, 66%, ${alpha})`);
+  g.addColorStop(1, `hsla(${hue + 36}, 100%, 52%, 0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
+
 export function drawHand(ctx, px) {
   ctx.save();
   ctx.strokeStyle = "#34e05a";
@@ -195,7 +254,7 @@ export function drawStrings(ctx, strings, now, w, h, wipeX = null) {
     const fade = stringFade(s, wipeX);
     if (fade <= 0.02) continue;
     ctx.globalAlpha = fade;
-    if (CONFIG.pitchLabels) {
+    if (CONFIG.pitchLabels || CONFIG.songId !== "off") {
       ctx.fillStyle = `hsla(${s.hue}, 100%, 86%, 0.88)`;
       ctx.fillText(s.name, (s.a.x + s.b.x) / 2, (s.a.y + s.b.y) / 2 - 8);
     }
@@ -271,7 +330,7 @@ function drawNoteLabel(ctx, s, now) {
   if (age < 0 || age > CONFIG.noteFloatMs) return;
   const fade = 1 - age / CONFIG.noteFloatMs;
   ctx.fillStyle = `hsla(${s.hue}, 100%, 88%, ${fade})`;
-  ctx.fillText(s.name, s.labelX, s.labelY - 14 - age * 0.028);
+  ctx.fillText(s.sung || s.name, s.labelX, s.labelY - 14 - age * 0.028);
 }
 
 /** Placed drums and the finger trail of a circle that has not closed yet. */
@@ -299,7 +358,7 @@ export function drawPads(ctx, pads, traces, now) {
       ctx.globalAlpha = 1;
     }
     ctx.fillStyle = `hsla(${pad.hue}, 100%, 88%, 0.85)`;
-    ctx.fillText(pad.kind, pad.x, pad.y);
+    ctx.fillText("drum", pad.x, pad.y);
   }
   ctx.strokeStyle = "rgba(126, 240, 255, 0.55)";
   ctx.lineWidth = 2;

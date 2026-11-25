@@ -52,18 +52,18 @@ export const CONFIG = {
   shakeFlips: 4, // direction changes inside the window
   shakeWindowMs: 480,
   circleStepPx: 16, // a still finger does not add another sample
-  circlePoints: 100,
-  circleMinPoints: 12,
-  circleMinMs: 280,
-  circleMaxMs: 2000,
+  circlePoints: 180,
+  circleMinPoints: 16,
+  circleMinMs: 450, // a flick is not a circle
+  circleMaxMs: 3600, // a slow circle keeps its start
   circleMinR: 36,
-  circleHatR: 78, // smaller than this is a hi-hat
-  circleTomR: 140, // smaller than this is a tom; larger is a kick
-  circleMaxR: 230,
-  circleClose: 0.42, // end must return within this fraction of the radius
-  circleRound: 0.36, // radius variation; higher allows a rougher circle
-  circleMinTurn: 4.8, // radians around the center, just under a full turn
-  circleCoverage: 0.62, // path length compared with the circumference
+  circleMaxR: 260,
+  circleClose: 0.38, // end must return within this fraction of the radius
+  circleRound: 0.34, // radius variation; higher allows a rougher oval
+  circleMinTurn: 5.6, // radians around the center; a wave is not enough
+  circleCoverage: 0.72, // path length compared with the circumference
+  circleGraceFrames: 5, // a long trail may flicker this long before it is dropped
+  circleJumpPx: 170, // a tracking teleport is not a corner of the circle
   padCooldownMs: 150,
   padMax: 6,
   muteRadius: 15, // px; a pinch that starts this close to a string mutes it
@@ -72,6 +72,11 @@ export const CONFIG = {
   pluckAttackSec: 0.004, // short attack so a mute ramp cannot click
 
   // Sound
+  songId: "off", // off | lamb | twinkle | joy
+  songBeatMs: 420, // one beat when a tune plays itself
+  songPluckPx: 0.45, // px/ms; a hovering finger does not start the tune
+  songPluckMinPx: 28, // the fingertip must travel this far as it crosses a string
+  songDecay: 5.5, // how fast a song note falls away, so the next one stays clear
   scaleId: "major-pentatonic",
   scale: [0, 2, 4, 7, 9], // major pentatonic (semitones)
   root: 0, // pitch class of the lowest note
@@ -81,6 +86,11 @@ export const CONFIG = {
   octaveMax: 5,
   spelling: "sharp",
   masterGain: 0.6,
+  compThreshold: -10, // dB; only the peaks are eased, so a drum does not swallow a pluck
+  compKnee: 18,
+  compRatio: 2.5,
+  compAttack: 0.012,
+  compRelease: 0.12,
   droneGain: 0.14, // tanpura level into the master, before the hand sets the volume
   droneLevelMin: 0.18, // master gain with the drone hand at the bottom of the frame
   droneLevelMax: 0.9, // master gain with the drone hand at the top
@@ -143,6 +153,13 @@ export const CONFIG = {
   pitchLabels: false,
 
   // Visuals
+  discoCycleMs: 9000, // how long the room takes to walk the rainbow
+  discoSweepMs: 2800, // how fast a beam crosses the picture
+  discoWash: 0.18, // idle color on the camera
+  discoWashKick: 0.34, // extra wash while a note is ringing
+  discoIdle: 0.28, // beam strength when nothing is playing
+  discoFlash: 0.62, // burst at the pluck
+  discoFlashMs: 700, // a drum hit colors the room this long
   segments: 48, // points per string when drawn vibrating
   vibAmp: 22, // px, initial pluck amplitude
   vibDecayMs: 900,

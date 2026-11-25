@@ -74,13 +74,17 @@ export class HandState {
     this.loopDrop = false;
     this.trace = []; // one-finger samples while a circle is being drawn
     this.circle = null; // set on the frame a loop closes
+    this.circleMiss = 0; // frames the index has been away without dropping the trail
     this.blade = [0, 1, 2].map(() => ({ prev: { x: 0, y: 0 }, tip: { x: 0, y: 0 }, ready: false }));
     // Swipe segments still to discard. A new hand's first motion is a tracking lock, not a pluck.
     this.blockSwipe = CONFIG.appearSettleFrames;
   }
 
-  /** Discard the next swipe segment so a release flick or a tracking gap cannot pluck. */
-  rebase() {
+  /**
+   * Discard the next swipe segment so a release flick or a tracking gap cannot pluck.
+   * A short tracking gap keeps the circle trail. A pinch does not.
+   */
+  rebase(keepTrace = false) {
     this.blockSwipe = Math.max(this.blockSwipe, CONFIG.gapSettleFrames);
     this.prevTip = null;
     this.samples.length = 0;
@@ -97,8 +101,11 @@ export class HandState {
     this.loopLatched = false;
     this.loopAnchorY = null;
     this.loopDropLatched = false;
-    this.trace.length = 0;
-    this.circle = null;
+    if (!keepTrace) {
+      this.trace.length = 0;
+      this.circle = null;
+      this.circleMiss = 0;
+    }
     for (const slot of this.blade) slot.ready = false;
   }
 
@@ -327,15 +334,31 @@ export class HandState {
     }
   }
 
-  /** One finger tracing a loop. Any other shape drops the trail. */
+  /**
+   * One pointing finger tracing a loop. An open hand does not draw a drum.
+   * A brief flicker keeps a trail that is already long. A pinch drops it.
+   */
   noteCircle(now) {
     this.circle = null;
-    const drawing = !this.pinching && !this.blockSwipe && strikeVoice(this) === "harp" && this.tip;
-    if (!drawing) {
+    if (this.pinching) {
       this.trace.length = 0;
+      this.circleMiss = 0;
       return;
     }
+    const drawing = strikeVoice(this) === "harp" && this.tip && !this.blockSwipe;
+    if (!drawing) {
+      if (this.blockSwipe > 0 && this.trace.length) return;
+      this.circleMiss += 1;
+      const underway = this.trace.length >= CONFIG.circleMinPoints
+        && this.circleMiss < CONFIG.circleGraceFrames;
+      if (underway) return;
+      this.trace.length = 0;
+      this.circleMiss = 0;
+      return;
+    }
+    this.circleMiss = 0;
     const last = this.trace[this.trace.length - 1];
+    if (last && dist(last, this.tip) > CONFIG.circleJumpPx) return;
     if (!last || dist(last, this.tip) >= CONFIG.circleStepPx) {
       this.trace.push({ x: this.tip.x, y: this.tip.y, t: now });
       if (this.trace.length > CONFIG.circlePoints) this.trace.shift();

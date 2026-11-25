@@ -3,11 +3,12 @@ import { dist, distToSegment, snapTo } from "./geometry.js";
 import { startCamera, createHandTracker, toPixels } from "./tracking.js";
 import { LM, assignHands, beginPinch, gestureLabel, strikeVoice } from "./gestures.js";
 import { StringField, velocityCurve } from "./strings.js";
-import { DrumKit, tomFreq } from "./drums.js";
+import { DrumKit, drumFreq } from "./drums.js";
 import { Synth, nextScaleFreqs } from "./audio.js";
+import { activeSong, songPhrase } from "./songs.js";
 import { stampLoop, dueEvents, upcoming } from "./loop.js";
 import { Particles } from "./particles.js";
-import { drawVideo, drawHand, drawGestureState, drawStrings, drawPads, drawCursor, drawWipe } from "./render.js";
+import { drawVideo, drawDisco, drawHand, drawGestureState, drawStrings, drawPads, drawCursor, drawWipe } from "./render.js";
 import { applySettings, bindPanel, currentSettings, readSaved, writeSaved } from "./settings.js";
 import { Recorder, chooseMime, downloadBlob, recordFilename } from "./record.js";
 
@@ -16,6 +17,10 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
 const toast = document.getElementById("toast");
+const nowPlaying = document.getElementById("nowPlaying");
+const nowMeta = document.getElementById("nowMeta");
+const nowLine = document.getElementById("nowLine");
+const nowSwar = document.getElementById("nowSwar");
 const startScreen = document.getElementById("start");
 const startBtn = document.getElementById("startBtn");
 const recordBtn = document.getElementById("recordBtn");
@@ -33,6 +38,9 @@ const field = new StringField();
 const kit = new DrumKit();
 const takes = [];
 const replies = [];
+const songNotes = [];
+let songUntil = 0;
+let shownLine = 0;
 let bar = null;
 const particles = new Particles();
 const hands = new Map(); // handedness label -> the HandState that still sits at that wrist
@@ -77,14 +85,19 @@ bindPanel((next) => {
   const musical = prev.scaleId !== nowSettings.scaleId
     || prev.root !== nowSettings.root
     || prev.octaves !== nowSettings.octaves
-    || prev.timbre !== nowSettings.timbre;
-  if (synth) {
-    if (prev.reverb !== nowSettings.reverb) synth.setReverb(nowSettings.reverb);
-    if (musical) {
-      const span = Math.hypot(canvas.width, canvas.height) * 0.7;
-      if (span) field.retune(span);
-      synth.warm();
-    }
+    || prev.timbre !== nowSettings.timbre
+    || prev.songId !== nowSettings.songId;
+  if (musical) {
+    const span = Math.hypot(canvas.width, canvas.height) * 0.7;
+    if (span) field.retune(span);
+    if (synth) synth.warm();
+  }
+  if (synth && prev.reverb !== nowSettings.reverb) synth.setReverb(nowSettings.reverb);
+  if (prev.songId !== nowSettings.songId) {
+    songNotes.length = 0;
+    songUntil = 0;
+    hideNowPlaying();
+    if (activeSong().steps) showToast(`${activeSong().name} — pluck once`);
   }
   persist();
 });
@@ -135,6 +148,34 @@ guideHide.addEventListener("click", () => {
   placeGuide();
 });
 document.getElementById("panelToggle").addEventListener("click", () => placeGuide());
+
+/** Big lyric and swar while a sung tune is sounding. Other songs have no words, so this stays hidden. */
+function showNowPlaying(note) {
+  nowPlaying.hidden = false;
+  nowMeta.textContent = `Playing · ${note.line} of ${note.lines}`;
+  if (shownLine !== note.line) {
+    shownLine = note.line;
+    nowLine.replaceChildren();
+    for (const [index, word] of (note.syllables || []).entries()) {
+      const span = document.createElement("span");
+      span.textContent = word;
+      span.dataset.i = String(index);
+      nowLine.append(span);
+    }
+  }
+  for (const span of nowLine.children) {
+    span.classList.toggle("on", Number(span.dataset.i) === note.mark);
+  }
+  nowSwar.textContent = note.swar;
+  nowSwar.classList.remove("pop");
+  void nowSwar.offsetWidth;
+  nowSwar.classList.add("pop");
+}
+
+function hideNowPlaying() {
+  nowPlaying.hidden = true;
+  shownLine = 0;
+}
 
 /** @param {string} text */
 function showToast(text) {
@@ -200,6 +241,8 @@ window.addEventListener("keydown", (e) => {
   if (wipeFrom) return;
   if (k === "z" && field.strings.length) {
     field.undo();
+    const span = Math.hypot(canvas.width, canvas.height) * 0.7;
+    if (span) field.retune(span);
     persist();
     showToast("Undo");
   }
@@ -268,8 +311,6 @@ function startWipe() {
   if (wipeFrom || (!field.strings.length && !kit.pads.length)) return;
   wipeFrom = performance.now();
 }
-
-const PAD_NAME = { hat: "Hat", tom: "Tom", kick: "Kick" };
 
 function playPad(pad, velocity) {
   const pan = (pad.x / (canvas.width || 1)) * 2 - 1;
@@ -358,6 +399,48 @@ function advanceLoop(now) {
     if (event.pad && kit.pads.includes(event.pad)) event.pad.soon = now;
   }
   bar.pos = pos;
+}
+
+/** One pluck starts the selected tune. Further plucks wait until it finishes. */
+function beginSong(now) {
+  if (!activeSong().steps) return false;
+  if (now < songUntil) return true;
+  const phrase = songPhrase(now);
+  if (!phrase) return false;
+  songNotes.push(...phrase.notes);
+  songUntil = phrase.until;
+  return true;
+}
+
+function flushSong(now) {
+  const strings = field.strings.filter((s) => !s.draft);
+  let i = 0;
+  while (i < songNotes.length) {
+    const note = songNotes[i];
+    if (note.at > now) {
+      i += 1;
+      continue;
+    }
+    const string = strings.length ? strings[note.index % strings.length] : null;
+    synth.pluck(note.freq, 0.9, 0, 0, string ? string.id : 0, "song");
+    if (string) {
+      string.pluckedAt = now;
+      string.amp = 0.9;
+      string.muted = false;
+      string.pluckT = 0.5;
+      string.name = note.swar || note.name;
+      string.hue = (note.freq * 0.7) % 360;
+      string.sung = note.swar || note.name;
+    }
+    if (note.swar) showNowPlaying(note);
+    songNotes.splice(i, 1);
+  }
+  if (songUntil && now >= songUntil && !songNotes.length) {
+    songUntil = 0;
+    hideNowPlaying();
+    const span = Math.hypot(canvas.width, canvas.height) * 0.7;
+    if (span) field.retune(span);
+  }
 }
 
 function flushReplies(now) {
@@ -454,6 +537,7 @@ function loop(now) {
   }
 
   drawVideo(ctx, video, W, H);
+  drawDisco(ctx, field.strings, kit.pads, now, W, H);
   const cursors = [];
 
   if (result) {
@@ -471,7 +555,7 @@ function loop(now) {
     const pending = [];
     for (const { detection, state } of pairs) {
       if (state.wasMissing) {
-        state.rebase();
+        state.rebase(true);
         state.wasMissing = false;
       }
       state.label = detection.label;
@@ -511,6 +595,7 @@ function loop(now) {
         const last = state.grab.last;
         field.moveBy(state.grab.string, state.pinchPoint.x - last.x, state.pinchPoint.y - last.y);
         state.grab.last = { x: state.pinchPoint.x, y: state.pinchPoint.y };
+        field.retune(maxLen);
       }
       if (ev.type === "pinchMove" && state.gesture === "nudge") {
         field.setEnd(state.grab.string, state.grab.end, state.pinchPoint, maxLen);
@@ -538,6 +623,7 @@ function loop(now) {
         if (state.gesture === "span" && !wipeFrom) {
           const kept = releaseSpan(state, maxLen);
           if (kept) {
+            field.retune(maxLen);
             kept.pluckedAt = now;
             persist();
             showToast(`String added (${kept.name})`);
@@ -571,11 +657,6 @@ function loop(now) {
           state.answer = null;
         }
       }
-      if (state.circle && !wipeFrom) {
-        const freq = state.circle.kind === "tom" ? tomFreq(state.circle.y, H) : 0;
-        const pad = kit.add(state.circle, freq, now);
-        showToast(`${PAD_NAME[pad.kind]} placed`);
-      }
       if (state.shake && state.wrist && !wipeFrom) {
         synth.hitDrum("shaker", 0.65, (state.wrist.x / W) * 2 - 1);
         particles.burst(state.wrist, 150, 0.35, { x: 1, y: 0 });
@@ -605,24 +686,34 @@ function loop(now) {
         if (pad) playPad(pad, velocityCurve(state.tipSpeed()));
       }
       const voice = strikeVoice(state);
-      if (ev.type === "move" && voice && !wipeFrom) {
-        const paths = voice === "chord"
-          ? state.blade.filter((slot) => slot.ready).map((slot) => ({ from: slot.prev, to: slot.tip }))
-          : [{ from: ev.from, to: ev.to }];
-        const hits = field.hitPaths(paths, now, state.tipSpeed());
+      const travel = ev.from && ev.to ? dist(ev.from, ev.to) : 0;
+      const deliberate = travel >= CONFIG.songPluckMinPx && state.tipSpeed() >= CONFIG.songPluckPx;
+      if (ev.type === "move" && voice && !wipeFrom && (!activeSong().steps || deliberate)) {
+        const hits = field.hitPaths(
+          voice === "chord"
+            ? state.blade.filter((slot) => slot.ready).map((slot) => ({ from: slot.prev, to: slot.tip }))
+            : [{ from: ev.from, to: ev.to }],
+          now,
+          state.tipSpeed(),
+        );
         hits.sort((a, b) => dist(ev.from, a.point) - dist(ev.from, b.point));
+        if (hits.length) {
+          state.circle = null;
+          state.trace.length = 0;
+        }
         if (hits.length && !played) {
           lastHitMs = performance.now() - detectedAt;
           played = true;
         }
+        const playingSong = activeSong().steps && deliberate && hits.length && beginSong(now);
         const stagger = voice === "chord" ? CONFIG.chordStaggerMs : CONFIG.strumStaggerMs;
         const timbre = voice === "glass" ? "glass" : voice === "chord" ? "harp" : undefined;
-        hits.forEach((hit, i) => {
+        if (!playingSong) hits.forEach((hit, i) => {
           if (voice === "chord") {
             hit.velocity = Math.max(hit.velocity, CONFIG.chordFloor);
             hit.string.amp = hit.velocity;
           }
-          const delayMs = i * stagger;
+          const delayMs = hit.songDelay ?? i * stagger;
           hit.string.pluckedAt = now + delayMs;
           const pan = (hit.point.x / W) * 2 - 1;
           synth.pluck(hit.string.freq, hit.velocity, pan, delayMs / 1000, hit.string.id, timbre);
@@ -647,6 +738,10 @@ function loop(now) {
           particles.schedule(now + delayMs, hit.point, hit.string.hue, hit.velocity, { x: dx / span, y: dy / span });
         });
       }
+      if (state.circle && !wipeFrom) {
+        kit.add(state.circle, drumFreq(state.circle.r), now);
+        showToast("Drum placed");
+      }
       if (debug) {
         drawHand(ctx, px);
         drawGestureState(ctx, state, now);
@@ -665,6 +760,7 @@ function loop(now) {
   }
 
   advanceLoop(now);
+  flushSong(now);
   flushReplies(now);
   const drawAt = performance.now();
   const wipeX = wipeFrom ? ((now - wipeFrom) / CONFIG.wipeMs) * (W + CONFIG.wipeBand) : null;
@@ -677,6 +773,9 @@ function loop(now) {
     kit.clear();
     bar = null;
     replies.length = 0;
+    songNotes.length = 0;
+    songUntil = 0;
+    hideNowPlaying();
     takes.length = 0;
     wipeFrom = 0;
     persist();
